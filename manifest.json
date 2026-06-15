@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Weather Model Comparison</title>
+
+<!-- PWA Meta -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="WeatherModels">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0f1b2d">
+<meta name="description" content="Compare GFS, ECMWF, CMC, and ICON weather model forecasts for any location worldwide.">
+
+<!-- PWA Icons -->
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+
+<style>
+  :root {
+    --sky: #0f1b2d;
+    --sky2: #162640;
+    --panel: rgba(255,255,255,0.05);
+    --panel-border: rgba(255,255,255,0.1);
+    --text: #e8f0fe;
+    --muted: rgba(255,255,255,0.5);
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body { background: var(--sky); color: var(--text); min-height: 100vh; min-height: 100dvh; overscroll-behavior: none; }
+
+  /* Install banner */
+  #installBanner {
+    display: none; position: fixed; bottom: calc(16px + var(--safe-bottom)); left: 16px; right: 16px;
+    background: #1e3a5f; border: 0.5px solid rgba(79,195,247,0.4); border-radius: 18px;
+    padding: 14px 16px; z-index: 999; box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    animation: slideUp 0.3s ease;
+  }
+  @keyframes slideUp { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
+  #installBanner.visible { display: flex; align-items: center; gap: 12px; }
+  .install-icon { font-size: 28px; flex-shrink: 0; }
+  .install-text { flex: 1; }
+  .install-text strong { font-size: 14px; display: block; margin-bottom: 2px; }
+  .install-text span { font-size: 12px; color: var(--muted); }
+  .install-btn {
+    background: #2563eb; border: none; border-radius: 10px; padding: 8px 16px;
+    color: white; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; flex-shrink: 0;
+  }
+  .install-dismiss {
+    background: none; border: none; color: var(--muted); font-size: 20px; cursor: pointer;
+    padding: 0 4px; flex-shrink: 0; line-height: 1;
+  }
+
+  /* iOS install instructions modal */
+  #iosInstall {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+    z-index: 1000; align-items: flex-end; padding: 0 12px calc(12px + var(--safe-bottom));
+  }
+  #iosInstall.visible { display: flex; }
+  .ios-card {
+    background: #1a2d4a; border: 0.5px solid rgba(255,255,255,0.15); border-radius: 20px;
+    padding: 24px 20px; width: 100%; text-align: center;
+  }
+  .ios-card h3 { font-size: 17px; font-weight: 600; margin-bottom: 8px; }
+  .ios-card p { font-size: 14px; color: var(--muted); line-height: 1.6; margin-bottom: 16px; }
+  .ios-step { display: flex; align-items: center; gap: 12px; text-align: left; margin-bottom: 12px; background: rgba(255,255,255,0.05); border-radius: 12px; padding: 12px 14px; }
+  .ios-step-num { background: #2563eb; border-radius: 50%; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; flex-shrink: 0; }
+  .ios-step-text { font-size: 14px; line-height: 1.4; }
+  .ios-step-text strong { color: var(--text); }
+  .ios-close { background: rgba(255,255,255,0.08); border: 0.5px solid var(--panel-border); border-radius: 12px; padding: 12px; width: 100%; color: var(--text); font-size: 15px; font-weight: 500; cursor: pointer; margin-top: 8px; }
+
+  /* Offline banner */
+  #offlineBanner {
+    display: none; background: rgba(251,191,36,0.15); border-bottom: 0.5px solid rgba(251,191,36,0.3);
+    padding: 8px 16px; text-align: center; font-size: 13px; color: #fbbf24;
+  }
+  #offlineBanner.visible { display: block; }
+
+  .header {
+    background: linear-gradient(180deg, #0a1628 0%, var(--sky) 100%);
+    padding: calc(16px + var(--safe-top)) 24px 20px; text-align: center;
+    border-bottom: 0.5px solid var(--panel-border);
+  }
+  .header h1 { font-size: 20px; font-weight: 600; letter-spacing: -0.3px; margin-bottom: 3px; }
+  .header p { font-size: 12px; color: var(--muted); }
+  .search-bar { display: flex; gap: 8px; max-width: 540px; margin: 14px auto 0; }
+  .search-bar input {
+    flex: 1; background: rgba(255,255,255,0.08); border: 0.5px solid var(--panel-border);
+    border-radius: 12px; padding: 11px 14px; color: var(--text); font-size: 15px;
+    outline: none; transition: border-color 0.2s; -webkit-appearance: none;
+  }
+  .search-bar input::placeholder { color: var(--muted); }
+  .search-bar input:focus { border-color: rgba(255,255,255,0.3); }
+  .search-bar button {
+    background: #2563eb; border: none; border-radius: 12px; padding: 11px 18px;
+    color: white; font-size: 15px; font-weight: 500; cursor: pointer;
+    transition: background 0.2s; white-space: nowrap; -webkit-appearance: none;
+  }
+  .search-bar button:active { background: #1d4ed8; transform: scale(0.97); }
+
+  .main { max-width: 960px; margin: 0 auto; padding: 20px 14px calc(80px + var(--safe-bottom)); }
+
+  .welcome { text-align: center; padding: 60px 24px; color: var(--muted); }
+  .welcome .big-icon { font-size: 56px; margin-bottom: 14px; }
+  .welcome h2 { font-size: 19px; font-weight: 500; color: var(--text); margin-bottom: 8px; }
+  .welcome p { font-size: 14px; line-height: 1.6; max-width: 360px; margin: 0 auto; }
+
+  .location-header { margin-bottom: 20px; }
+  .location-header h2 { font-size: 22px; font-weight: 600; margin-bottom: 3px; }
+  .location-header p { font-size: 12px; color: var(--muted); }
+
+  .model-legend { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; background: var(--panel); border: 0.5px solid var(--panel-border); border-radius: 20px; padding: 5px 12px; font-size: 12px; }
+  .legend-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+  .legend-accuracy { font-size: 11px; color: var(--muted); }
+
+  .tab-bar {
+    display: flex; gap: 3px; margin-bottom: 16px;
+    background: rgba(255,255,255,0.04); border: 0.5px solid var(--panel-border);
+    border-radius: 12px; padding: 3px; overflow-x: auto; scrollbar-width: none;
+  }
+  .tab-bar::-webkit-scrollbar { display: none; }
+  .tab {
+    padding: 7px 14px; border-radius: 9px; font-size: 13px; font-weight: 500;
+    cursor: pointer; border: none; background: transparent; color: var(--muted);
+    transition: all 0.2s; white-space: nowrap; flex-shrink: 0;
+  }
+  .tab.active { background: rgba(255,255,255,0.12); color: var(--text); }
+
+  .forecast-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-bottom: 10px; }
+  @media (min-width: 480px) { .forecast-grid { grid-template-columns: repeat(10, 1fr); } }
+
+  .day-card {
+    background: var(--panel); border: 0.5px solid var(--panel-border);
+    border-radius: 14px; padding: 10px 6px; text-align: center;
+    transition: background 0.15s, border-color 0.15s; cursor: pointer; user-select: none;
+    touch-action: manipulation;
+  }
+  .day-card:active { background: rgba(255,255,255,0.09); }
+  .day-card.selected { background: rgba(79,195,247,0.12); border-color: rgba(79,195,247,0.4); }
+  .day-card .day-name { font-size: 10px; color: var(--muted); font-weight: 600; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.3px; }
+  .day-card.selected .day-name { color: #4fc3f7; }
+  .day-card .day-icon { font-size: 22px; margin-bottom: 6px; }
+  .day-card .day-high { font-size: 15px; font-weight: 600; }
+  .day-card .day-low { font-size: 11px; color: var(--muted); margin-top: 1px; }
+  .day-card .day-precip { font-size: 10px; color: #7ec8f7; margin-top: 4px; }
+  .day-card .tap-hint { font-size: 9px; color: var(--muted); margin-top: 4px; opacity: 0.4; }
+
+  .hourly-panel {
+    background: rgba(255,255,255,0.04); border: 0.5px solid rgba(79,195,247,0.3);
+    border-radius: 18px; margin-bottom: 20px; overflow: hidden;
+    animation: slideDown 0.2s ease;
+  }
+  @keyframes slideDown { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:translateY(0); } }
+  .hourly-panel-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 16px 10px; border-bottom: 0.5px solid var(--panel-border);
+  }
+  .hourly-panel-header h3 { font-size: 14px; font-weight: 600; }
+  .close-btn {
+    background: rgba(255,255,255,0.08); border: 0.5px solid var(--panel-border);
+    border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center;
+    justify-content: center; cursor: pointer; font-size: 13px; color: var(--muted); flex-shrink: 0;
+  }
+  .hourly-model-tabs { display: flex; border-bottom: 0.5px solid var(--panel-border); overflow-x: auto; scrollbar-width: none; }
+  .hourly-model-tabs::-webkit-scrollbar { display: none; }
+  .hm-tab {
+    padding: 9px 16px; font-size: 13px; font-weight: 500; cursor: pointer;
+    border: none; background: transparent; color: var(--muted);
+    border-bottom: 2px solid transparent; white-space: nowrap;
+    transition: color 0.15s, border-color 0.15s; touch-action: manipulation;
+  }
+  .hourly-chart-wrap { padding: 12px 16px 6px; }
+  .hourly-chart-wrap h4 { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 8px; }
+  .mini-chart { height: 65px; }
+  .mini-chart svg { width: 100%; height: 100%; display: block; }
+  .hourly-scroll-wrap { overflow-x: auto; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.1) transparent; }
+  .hourly-scroll-wrap::-webkit-scrollbar { height: 3px; }
+  .hourly-scroll-wrap::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 2px; }
+  .hourly-row { display: grid; grid-template-columns: 72px 38px 54px 72px 62px 80px; border-bottom: 0.5px solid var(--panel-border); min-width: 378px; }
+  .hourly-row:last-child { border-bottom: none; }
+  .hourly-row.hdr { background: rgba(255,255,255,0.04); font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  .hourly-row.night-row { background: rgba(0,0,0,0.15); }
+  .h-cell { padding: 8px 6px; font-size: 13px; display: flex; align-items: center; }
+  .h-cell:first-child { padding-left: 16px; font-weight: 500; font-size: 12px; }
+  .h-icon { font-size: 16px; }
+  .h-temp { font-weight: 600; font-size: 13px; }
+  .h-precip { color: #7ec8f7; font-size: 12px; }
+  .h-wind { color: var(--muted); font-size: 11px; }
+
+  .model-section { margin-bottom: 24px; }
+  .model-section h3 { font-size: 12px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+  .comparison-table { background: var(--panel); border: 0.5px solid var(--panel-border); border-radius: 14px; overflow: hidden; margin-bottom: 16px; overflow-x: auto; }
+  .ct-header { display: grid; grid-template-columns: 80px repeat(10, minmax(44px,1fr)); background: rgba(255,255,255,0.06); border-bottom: 0.5px solid var(--panel-border); font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; min-width: 520px; }
+  .ct-header div, .ct-row div { padding: 8px 4px; text-align: center; }
+  .ct-header div:first-child, .ct-row div:first-child { text-align: left; padding-left: 12px; }
+  .ct-row { display: grid; grid-template-columns: 80px repeat(10, minmax(44px,1fr)); border-bottom: 0.5px solid var(--panel-border); font-size: 12px; min-width: 520px; }
+  .ct-row:last-child { border-bottom: none; }
+  .model-label { display: flex; align-items: center; gap: 6px; font-weight: 500; font-size: 12px; }
+  .model-label .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .temp-diff-pos { color: #f87171; font-size: 9px; }
+  .temp-diff-neg { color: #7ec8f7; font-size: 9px; }
+
+  .spread-section { background: var(--panel); border: 0.5px solid var(--panel-border); border-radius: 14px; padding: 16px; margin-bottom: 16px; }
+  .spread-section h3 { font-size: 12px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 14px; }
+  .spread-day { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .spread-day:last-child { margin-bottom: 0; }
+  .spread-date { font-size: 11px; color: var(--muted); width: 30px; text-align: right; flex-shrink: 0; }
+  .spread-bar-wrap { flex: 1; position: relative; height: 18px; }
+  .spread-bar-bg { position: absolute; top: 7px; left: 0; right: 0; height: 4px; background: rgba(255,255,255,0.08); border-radius: 2px; }
+  .spread-bar-fill { position: absolute; top: 7px; height: 4px; border-radius: 2px; }
+  .spread-dots { position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
+  .spread-dot { position: absolute; top: 50%; transform: translate(-50%,-50%); width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--sky2); }
+  .spread-range { font-size: 11px; color: var(--muted); width: 60px; text-align: right; flex-shrink: 0; }
+  .confidence-badge { display: inline-flex; align-items: center; border-radius: 20px; padding: 2px 8px; font-size: 11px; font-weight: 600; }
+  .conf-high { background: rgba(110,231,183,0.15); color: #6ee7b7; }
+  .conf-med  { background: rgba(251,191,36,0.15);  color: #fbbf24; }
+  .conf-low  { background: rgba(248,113,113,0.15); color: #f87171; }
+
+  .accuracy-section { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 24px; }
+  @media (min-width: 600px) { .accuracy-section { grid-template-columns: repeat(4, 1fr); } }
+  .accuracy-card { background: var(--panel); border: 0.5px solid var(--panel-border); border-radius: 14px; padding: 14px; }
+  .accuracy-card .model-name { font-size: 13px; font-weight: 600; margin-bottom: 3px; }
+  .accuracy-card .model-full { font-size: 10px; color: var(--muted); margin-bottom: 3px; }
+  .score-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 3px; margin-top: 10px; }
+  .score-val { font-size: 20px; font-weight: 600; }
+  .score-bar-bg { height: 3px; background: rgba(255,255,255,0.1); border-radius: 2px; margin-top: 6px; }
+  .score-bar-fill { height: 3px; border-radius: 2px; }
+
+  .loading { text-align: center; padding: 60px 24px; color: var(--muted); }
+  .spinner { width: 34px; height: 34px; border: 2px solid rgba(255,255,255,0.1); border-top-color: #4fc3f7; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 14px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .error-msg { background: rgba(248,113,113,0.1); border: 0.5px solid rgba(248,113,113,0.3); border-radius: 12px; padding: 14px 18px; color: #f87171; font-size: 14px; margin-bottom: 16px; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<!-- Offline notice -->
+<div id="offlineBanner">⚡ You're offline — showing cached forecast data</div>
+
+<!-- Android/Desktop install banner -->
+<div id="installBanner">
+  <div class="install-icon">⛅</div>
+  <div class="install-text">
+    <strong>Install WeatherModels</strong>
+    <span>Add to home screen for quick access</span>
+  </div>
+  <button class="install-btn" onclick="installApp()">Install</button>
+  <button class="install-dismiss" onclick="dismissInstall()">×</button>
+</div>
+
+<!-- iOS install instructions -->
+<div id="iosInstall">
+  <div class="ios-card">
+    <h3>📲 Add to Home Screen</h3>
+    <p>Install WeatherModels for a native app experience with offline support.</p>
+    <div class="ios-step">
+      <div class="ios-step-num">1</div>
+      <div class="ios-step-text">Tap the <strong>Share button</strong> (□↑) at the bottom of Safari</div>
+    </div>
+    <div class="ios-step">
+      <div class="ios-step-num">2</div>
+      <div class="ios-step-text">Scroll down and tap <strong>"Add to Home Screen"</strong></div>
+    </div>
+    <div class="ios-step">
+      <div class="ios-step-num">3</div>
+      <div class="ios-step-text">Tap <strong>Add</strong> — the app icon will appear on your home screen</div>
+    </div>
+    <button class="ios-close" onclick="document.getElementById('iosInstall').classList.remove('visible')">Got it</button>
+  </div>
+</div>
+
+<div class="header">
+  <h1>⛅ Weather Model Comparison</h1>
+  <p>GFS · ECMWF · CMC · ICON — tap any day for hourly breakdown</p>
+  <div class="search-bar">
+    <input type="text" id="searchInput" placeholder="City, zip code, or country..." autocomplete="off" autocorrect="off" spellcheck="false"/>
+    <button onclick="doSearch()">Go</button>
+  </div>
+</div>
+
+<div class="main">
+  <div id="welcome" class="welcome">
+    <div class="big-icon">🌍</div>
+    <h2>Global multi-model forecast</h2>
+    <p>Search any location worldwide. Compare the top 4 weather models and tap any day for a full hourly breakdown.</p>
+  </div>
+  <div id="loadingEl" class="loading hidden">
+    <div class="spinner"></div>
+    <p>Fetching 4 model forecasts...</p>
+  </div>
+  <div id="errorEl" class="error-msg hidden"></div>
+
+  <div id="results" class="hidden">
+    <div class="location-header">
+      <h2 id="locName"></h2>
+      <p id="locSub"></p>
+    </div>
+    <div class="model-legend" id="legendEl"></div>
+    <div class="tab-bar">
+      <button class="tab active" onclick="switchTab(this,'overview')">Overview</button>
+      <button class="tab" onclick="switchTab(this,'comparison')">Comparison</button>
+      <button class="tab" onclick="switchTab(this,'spread')">Spread</button>
+      <button class="tab" onclick="switchTab(this,'accuracy')">Accuracy</button>
+    </div>
+
+    <div id="tab-overview">
+      <div class="forecast-grid" id="forecastGrid"></div>
+      <div id="hourlyPanel"></div>
+    </div>
+    <div id="tab-comparison" class="hidden">
+      <div class="model-section"><h3>📊 High Temp by Model (°F)</h3><div class="comparison-table" id="highTable"></div></div>
+      <div class="model-section"><h3>🌧 Precip Probability (%)</h3><div class="comparison-table" id="precipTable"></div></div>
+    </div>
+    <div id="tab-spread" class="hidden">
+      <div class="spread-section"><h3>📐 Model Spread — High Temp (°F)</h3><div id="spreadChart"></div></div>
+      <div class="spread-section"><h3>🎯 Confidence Key</h3><div id="confidenceList"></div></div>
+    </div>
+    <div id="tab-accuracy" class="hidden">
+      <div class="accuracy-section" id="accuracyCards"></div>
+      <div class="spread-section">
+        <p style="font-size:12px;color:var(--muted);line-height:1.7"><strong style="color:var(--text)">About scores:</strong> Historical track record for 1–10 day forecasts. ECMWF ranks #1 globally. GFS is NOAA's American model. CMC excels over Canada and the North Atlantic. ICON performs best over Europe. Accuracy drops significantly beyond day 7.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ---- PWA setup ----
+let deferredInstallPrompt = null;
+const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
+const isStandalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  if (!isStandalone && !localStorage.getItem('installDismissed')) {
+    setTimeout(() => document.getElementById('installBanner').classList.add('visible'), 2000);
+  }
+});
+
+function installApp() {
+  document.getElementById('installBanner').classList.remove('visible');
+  if (deferredInstallPrompt) {
+    deferredInstallPrompt.prompt();
+    deferredInstallPrompt.userChoice.then(() => { deferredInstallPrompt = null; });
+  }
+}
+function dismissInstall() {
+  document.getElementById('installBanner').classList.remove('visible');
+  localStorage.setItem('installDismissed', '1');
+}
+
+// iOS — show instructions after a short delay
+if (isIOS && !isStandalone && !localStorage.getItem('iosInstallSeen')) {
+  setTimeout(() => {
+    document.getElementById('iosInstall').classList.add('visible');
+    localStorage.setItem('iosInstallSeen', '1');
+  }, 3000);
+}
+
+// Offline detection
+window.addEventListener('online',  () => document.getElementById('offlineBanner').classList.remove('visible'));
+window.addEventListener('offline', () => document.getElementById('offlineBanner').classList.add('visible'));
+if (!navigator.onLine) document.getElementById('offlineBanner').classList.add('visible');
+
+// Register service worker
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(e => console.warn('SW registration failed:', e));
+  });
+}
+
+// ---- App logic ----
+const MODELS = [
+  { id:'gfs',   name:'GFS',   full:'Global Forecast System',        origin:'🇺🇸 NOAA',    color:'#4fc3f7', accuracy:87, desc:"NOAA's primary American model. Best over North America, updated every 6 hours." },
+  { id:'ecmwf', name:'ECMWF', full:'European Centre Model',          origin:'🇪🇺 ECMWF',    color:'#a78bfa', accuracy:93, desc:'Globally ranked #1 for accuracy. Used by most professional meteorologists worldwide.' },
+  { id:'cmc',   name:'CMC',   full:'Canadian Meteorological Centre', origin:'🇨🇦 CMC',  color:'#6ee7b7', accuracy:83, desc:'Strong performer over Canada and North Atlantic storm systems.' },
+  { id:'icon',  name:'ICON',  full:'Icosahedral Nonhydrostatic',     origin:'🇩🇪 DWD', color:'#fbbf24', accuracy:85, desc:'High-resolution European model. Excels at mesoscale weather.' },
+];
+const API_KEYS = { gfs:'gfs_seamless', ecmwf:'ecmwf_ifs025', cmc:'gem_seamless', icon:'icon_seamless' };
+
+let forecastData = {}, days = [], selectedDay = null, activeHourlyModel = 'gfs';
+
+function switchTab(btn, tab) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  ['overview','comparison','spread','accuracy'].forEach(t =>
+    document.getElementById('tab-'+t).classList.toggle('hidden', t !== tab));
+}
+
+document.getElementById('searchInput').addEventListener('keydown', e => { if (e.key==='Enter') doSearch(); });
+
+async function doSearch() {
+  const q = document.getElementById('searchInput').value.trim();
+  if (!q) return;
+  document.getElementById('searchInput').blur();
+  document.getElementById('welcome').classList.add('hidden');
+  document.getElementById('results').classList.add('hidden');
+  document.getElementById('errorEl').classList.add('hidden');
+  document.getElementById('loadingEl').classList.remove('hidden');
+  selectedDay = null; forecastData = {};
+  try {
+    const geo = await geocode(q);
+    if (!geo) throw new Error('Location not found. Try a city name or "City, Country".');
+    const data = await fetchAllModels(geo.lat, geo.lon);
+    forecastData = data;
+    days = data.gfs.daily.time;
+    renderAll(geo);
+    document.getElementById('loadingEl').classList.add('hidden');
+    document.getElementById('results').classList.remove('hidden');
+    // Save last search
+    localStorage.setItem('lastSearch', q);
+  } catch(e) {
+    document.getElementById('loadingEl').classList.add('hidden');
+    document.getElementById('errorEl').textContent = '⚠ ' + e.message;
+    document.getElementById('errorEl').classList.remove('hidden');
+    document.getElementById('welcome').classList.remove('hidden');
+  }
+}
+
+async function geocode(query) {
+  const r = await fetch('https://geocoding-api.open-meteo.com/v1/search?name='+encodeURIComponent(query)+'&count=1&language=en&format=json');
+  const d = await r.json();
+  if (!d.results || !d.results.length) return null;
+  const res = d.results[0];
+  return { lat: res.latitude, lon: res.longitude, name: res.name, country: res.country, region: res.admin1 };
+}
+
+async function fetchAllModels(lat, lon) {
+  const dailyVars = 'temperature_2m_max,temperature_2m_min,precipitation_probability_max,weathercode';
+  const hourlyVars = 'temperature_2m,apparent_temperature,precipitation_probability,weathercode,windspeed_10m';
+  const promises = MODELS.map(m => {
+    const url = 'https://api.open-meteo.com/v1/forecast?latitude='+lat+'&longitude='+lon
+      +'&daily='+dailyVars+'&hourly='+hourlyVars
+      +'&temperature_unit=fahrenheit&windspeed_unit=mph&forecast_days=10'
+      +'&models='+API_KEYS[m.id]+'&timezone=auto';
+    return fetch(url)
+      .then(r => { if(!r.ok) throw new Error('API error '+r.status); return r.json(); })
+      .then(d => ({ id: m.id, daily: d.daily, hourly: d.hourly }));
+  });
+  const results = await Promise.all(promises);
+  const out = {};
+  results.forEach(r => { out[r.id] = r; });
+  return out;
+}
+
+function wmoIcon(code) {
+  if (code==null) return '❓';
+  if (code===0) return '☀️'; if (code<=2) return '⛅'; if (code<=3) return '☁️';
+  if (code<=49) return '🌫'; if (code<=59) return '🌦'; if (code<=69) return '🌧';
+  if (code<=79) return '❄️'; if (code<=84) return '🌧'; if (code<=94) return '⛈';
+  return '🌩';
+}
+function shortDay(dateStr, i) {
+  if (i===0) return 'Today';
+  return new Date(dateStr+'T12:00:00').toLocaleDateString('en-US',{weekday:'short'});
+}
+function fullDayLabel(dateStr, i) {
+  if (i===0) return 'Today'; if (i===1) return 'Tomorrow';
+  return new Date(dateStr+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'});
+}
+function fmtHour(t) {
+  const h = parseInt((t.split('T')[1]||'00').split(':')[0],10);
+  return (h%12||12)+(h>=12?' PM':' AM');
+}
+function isNight(t) { const h=parseInt((t.split('T')[1]||'12').split(':')[0],10); return h<6||h>=20; }
+
+function renderAll(geo) {
+  document.getElementById('locName').textContent = geo.name+(geo.region?', '+geo.region:'');
+  document.getElementById('locSub').textContent = geo.country+' · '+geo.lat.toFixed(2)+'°, '+geo.lon.toFixed(2)+'° · Open-Meteo';
+  renderLegend(); renderOverview(); renderComparison(); renderSpread(); renderAccuracy();
+}
+function renderLegend() {
+  document.getElementById('legendEl').innerHTML = MODELS.map(m =>
+    `<div class="legend-item"><div class="legend-dot" style="background:${m.color}"></div><strong>${m.name}</strong><span class="legend-accuracy">${m.origin}</span></div>`
+  ).join('');
+}
+function renderOverview() {
+  const gfs=forecastData.gfs.daily, ecmwf=forecastData.ecmwf.daily;
+  document.getElementById('forecastGrid').innerHTML = days.map((d,i) => {
+    const code=(ecmwf.weathercode||gfs.weathercode)[i];
+    const hi=Math.round(((gfs.temperature_2m_max[i]||0)+(ecmwf.temperature_2m_max[i]||0))/2);
+    const lo=Math.round(((gfs.temperature_2m_min[i]||0)+(ecmwf.temperature_2m_min[i]||0))/2);
+    const pr=Math.round(gfs.precipitation_probability_max[i]||0);
+    return `<div class="day-card" id="dc${i}" onclick="toggleDay(${i})">
+      <div class="day-name">${shortDay(d,i)}</div>
+      <div class="day-icon">${wmoIcon(code)}</div>
+      <div class="day-high">${hi}°</div>
+      <div class="day-low">${lo}°</div>
+      ${pr>15?`<div class="day-precip">💧${pr}%</div>`:''}
+      <div class="tap-hint">▼ hrs</div>
+    </div>`;
+  }).join('');
+  document.getElementById('hourlyPanel').innerHTML='';
+}
+
+function toggleDay(i) {
+  if (selectedDay===i) {
+    selectedDay=null;
+    document.querySelectorAll('.day-card').forEach(c=>c.classList.remove('selected'));
+    document.getElementById('hourlyPanel').innerHTML='';
+    return;
+  }
+  selectedDay=i;
+  document.querySelectorAll('.day-card').forEach((c,ci)=>c.classList.toggle('selected',ci===i));
+  renderHourlyPanel(i, activeHourlyModel);
+}
+
+function renderHourlyPanel(dayIndex, modelId) {
+  activeHourlyModel = modelId;
+  const model = MODELS.find(m=>m.id===modelId);
+  const hourly = forecastData[modelId].hourly;
+  const dateStr = days[dayIndex];
+  const indices = (hourly.time||[]).map((t,idx)=>t&&t.startsWith(dateStr)?idx:-1).filter(i=>i>=0);
+  const temps = indices.map(idx=>hourly.temperature_2m[idx]);
+  const valid = temps.filter(t=>t!=null);
+
+  let chartSvg='';
+  if (valid.length>1) {
+    const tMin=Math.min(...valid)-2, tMax=Math.max(...valid)+2, tR=tMax-tMin||1;
+    const W=800,H=60;
+    const pts=temps.map((t,i)=>`${(i/(temps.length-1))*W},${H-((( t??tMin)-tMin)/tR)*H}`).join(' ');
+    chartSvg=`<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+      <defs><linearGradient id="cg" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="${model.color}" stop-opacity="0.3"/>
+        <stop offset="100%" stop-color="${model.color}" stop-opacity="0"/>
+      </linearGradient></defs>
+      <polygon points="0,${H} ${pts} ${W},${H}" fill="url(#cg)"/>
+      <polyline points="${pts}" fill="none" stroke="${model.color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>`;
+  }
+
+  const modelTabs = MODELS.map(m=>
+    `<button class="hm-tab" style="color:${m.id===modelId?m.color:'var(--muted)'};border-bottom-color:${m.id===modelId?m.color:'transparent'}"
+      onclick="renderHourlyPanel(${dayIndex},'${m.id}')">${m.name}</button>`).join('');
+
+  const rows = indices.length===0
+    ? `<div style="padding:20px;color:var(--muted);font-size:13px;text-align:center">No hourly data available.</div>`
+    : indices.map(idx=>{
+        const t=Math.round(hourly.temperature_2m[idx]??0);
+        const f=Math.round(hourly.apparent_temperature[idx]??t);
+        const p=Math.round(hourly.precipitation_probability[idx]??0);
+        const w=Math.round(hourly.windspeed_10m[idx]??0);
+        const ts=hourly.time[idx];
+        return `<div class="hourly-row${isNight(ts)?' night-row':''}">
+          <div class="h-cell">${fmtHour(ts)}</div>
+          <div class="h-cell h-icon">${wmoIcon(hourly.weathercode[idx])}</div>
+          <div class="h-cell h-temp">${t}°</div>
+          <div class="h-cell" style="color:var(--muted);font-size:11px">Feels ${f}°</div>
+          <div class="h-cell h-precip">${p>0?'💧'+p+'%':'—'}</div>
+          <div class="h-cell h-wind">🌬${w}mph</div>
+        </div>`;
+      }).join('');
+
+  document.getElementById('hourlyPanel').innerHTML=`
+    <div class="hourly-panel">
+      <div class="hourly-panel-header">
+        <h3>⏱ ${fullDayLabel(dateStr,dayIndex)}</h3>
+        <div class="close-btn" onclick="toggleDay(${dayIndex})">✕</div>
+      </div>
+      <div class="hourly-model-tabs">${modelTabs}</div>
+      ${valid.length>1?`<div class="hourly-chart-wrap"><h4>Temp trend — ${model.name}</h4><div class="mini-chart">${chartSvg}</div></div>`:''}
+      <div class="hourly-scroll-wrap"><div>
+        <div class="hourly-row hdr">
+          <div class="h-cell">Hour</div><div class="h-cell">Sky</div><div class="h-cell">Temp</div>
+          <div class="h-cell">Feels</div><div class="h-cell">Precip</div><div class="h-cell">Wind</div>
+        </div>${rows}
+      </div></div>
+    </div>`;
+  setTimeout(()=>document.getElementById('hourlyPanel').scrollIntoView({behavior:'smooth',block:'nearest'}),50);
+}
+
+function buildTable(fn, fmt, colorFn) {
+  const hdr=days.map((d,i)=>`<div>${shortDay(d,i)}<br><span style="font-size:9px;opacity:0.5">${new Date(d+'T12:00:00').toLocaleDateString('en-US',{month:'numeric',day:'numeric'})}</span></div>`).join('');
+  const rows=MODELS.map(m=>{
+    const vals=fn(forecastData[m.id].daily), ref=fn(forecastData.ecmwf.daily);
+    const cells=vals.map((v,i)=>{
+      const rv=Math.round(v), diff=m.id!=='ecmwf'?Math.round(v-ref[i]):null;
+      const dh=diff!=null&&diff!==0?`<br><span class="${diff>0?'temp-diff-pos':'temp-diff-neg'}">${diff>0?'+':''}${diff}</span>`:'';
+      return `<div style="color:${colorFn?colorFn(v):''}">${fmt(rv)}${dh}</div>`;
+    }).join('');
+    return `<div class="ct-row"><div><div class="model-label"><div class="dot" style="background:${m.color}"></div>${m.name}</div></div>${cells}</div>`;
+  }).join('');
+  return `<div class="ct-header"><div>Model</div>${hdr}</div>${rows}`;
+}
+function renderComparison() {
+  document.getElementById('highTable').innerHTML=buildTable(d=>d.temperature_2m_max,v=>v+'°',v=>v>=95?'#f87171':v>=85?'#fbbf24':v<=32?'#7ec8f7':'');
+  document.getElementById('precipTable').innerHTML=buildTable(d=>d.precipitation_probability_max.map(v=>v||0),v=>v+'%',v=>v>=70?'#7ec8f7':v>=40?'#a78bfa':'');
+}
+function renderSpread() {
+  const ah=days.map((d,i)=>{
+    const vals=MODELS.map(m=>forecastData[m.id].daily.temperature_2m_max[i]).filter(v=>v!=null);
+    return{date:d,i,min:Math.min(...vals),max:Math.max(...vals),spread:Math.max(...vals)-Math.min(...vals)};
+  });
+  const gMin=Math.min(...ah.map(d=>d.min)),gMax=Math.max(...ah.map(d=>d.max)),range=gMax-gMin||1;
+  document.getElementById('spreadChart').innerHTML=ah.map(({date,i,min,max,spread})=>{
+    const dots=MODELS.map(m=>{const v=forecastData[m.id].daily.temperature_2m_max[i];if(v==null)return'';return`<div class="spread-dot" style="left:${((v-gMin)/range)*100}%;background:${m.color}"></div>`;}).join('');
+    const conf=spread<=2?'High':spread<=5?'Moderate':'Low',cls=spread<=2?'conf-high':spread<=5?'conf-med':'conf-low';
+    return`<div class="spread-day"><div class="spread-date">${shortDay(date,i)}</div><div class="spread-bar-wrap"><div class="spread-bar-bg"></div><div class="spread-bar-fill" style="left:${((min-gMin)/range)*100}%;width:${((max-min)/range)*100||1}%;background:rgba(255,255,255,0.25)"></div><div class="spread-dots">${dots}</div></div><div style="display:flex;align-items:center;gap:6px;flex-shrink:0"><span class="spread-range">${Math.round(min)}°–${Math.round(max)}°</span><span class="confidence-badge ${cls}">${conf}</span></div></div>`;
+  }).join('');
+  document.getElementById('confidenceList').innerHTML=`<p style="font-size:12px;color:var(--muted);line-height:1.8"><span class="confidence-badge conf-high">High</span> models within 2°F — strong agreement<br><span class="confidence-badge conf-med">Moderate</span> within 2–5°F — some uncertainty<br><span class="confidence-badge conf-low">Low</span> differ 5°F+ — check closer to the date</p>`;
+}
+function renderAccuracy() {
+  document.getElementById('accuracyCards').innerHTML=[...MODELS].sort((a,b)=>b.accuracy-a.accuracy).map((m,rank)=>`
+    <div class="accuracy-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
+        <div class="model-name" style="color:${m.color}">${m.name}</div>
+        <span style="font-size:10px;color:var(--muted)">#${rank+1}</span>
+      </div>
+      <div class="model-full">${m.full}</div><div class="model-full">${m.origin}</div>
+      <div class="score-label">10-day accuracy</div>
+      <div class="score-val" style="color:${m.color}">${m.accuracy}%</div>
+      <div class="score-bar-bg"><div class="score-bar-fill" style="width:${m.accuracy}%;background:${m.color}"></div></div>
+      <p style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.5">${m.desc}</p>
+    </div>`).join('');
+}
+
+// Auto-reload last search on launch
+window.addEventListener('load', () => {
+  const last = localStorage.getItem('lastSearch');
+  if (last) {
+    document.getElementById('searchInput').value = last;
+    doSearch();
+  } else {
+    document.getElementById('searchInput').focus();
+  }
+});
+</script>
+</body>
+</html>
